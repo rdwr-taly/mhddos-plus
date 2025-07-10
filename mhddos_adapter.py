@@ -15,8 +15,12 @@ log = logging.getLogger(__name__)
 
 class MhDosAdapter(ApplicationAdapter):
     """
-    Adapter to control the MHDDoS Plus application, replicating the logic
-    from the original Flask-based container_control.py.
+    Adapter to control the MHDDoS Plus application.
+    
+    v2.0 - Simplified to leverage core services for:
+    - Traffic control (bandwidth/latency) via core traffic_control service  
+    - Network metrics via core metrics service
+    - Process lifecycle remains in adapter for complex multi-task scenarios
     """
 
     def __init__(self, static_cfg: Dict[str, Any] | None = None) -> None:
@@ -35,9 +39,6 @@ class MhDosAdapter(ApplicationAdapter):
         self.grace_period = 5
         self._prev_net_io = None
         self._prev_time = None
-        
-        # Initial network settings
-        self._apply_network_settings(10, 0)
 
 
     # -------------------------------------------------------------------- #
@@ -132,29 +133,64 @@ class MhDosAdapter(ApplicationAdapter):
     # -------------------------------------------------------------------- #
 
     def get_metrics(self) -> Dict[str, Any]:
-        incoming_mbps, outgoing_mbps = self._calculate_throughput()
+        # Core v2.0 provides network metrics automatically via /api/metrics
+        # We focus on application-specific metrics here
         next_run_str = "Not scheduled"
         if self.next_run_time:
             next_run_str = self.next_run_time.astimezone(timezone.utc).isoformat()
 
-        return {
+        metrics = {
             "app_status": self.app_status,
-            "incoming_throughput_mbps": incoming_mbps,
-            "outgoing_throughput_mbps": outgoing_mbps,
             "running_task": self.running_task_name,
             "next_run_time": next_run_str,
             "cron_active": self.cron_active,
             "cron_schedule": self.cron_schedule,
+            "sub_tasks_count": len(self.sub_tasks),
         }
+
+        # Optionally include custom throughput calculation for compatibility
+        # This will be in addition to core's network metrics
+        incoming_mbps, outgoing_mbps = self._calculate_throughput()
+        if incoming_mbps is not None and outgoing_mbps is not None:
+            metrics.update({
+                "incoming_throughput_mbps": incoming_mbps,
+                "outgoing_throughput_mbps": outgoing_mbps,
+            })
+
+        return metrics
 
     def prometheus_metrics(self) -> List[str]:
         incoming, outgoing = self._calculate_throughput()
         lines = [
+            f"# HELP mhddos_incoming_throughput_mbps incoming throughput calculation",
             f"mhddos_incoming_throughput_mbps {incoming or 0}",
+            f"# HELP mhddos_outgoing_throughput_mbps outgoing throughput calculation", 
             f"mhddos_outgoing_throughput_mbps {outgoing or 0}",
+            f"# HELP mhddos_cron_active Whether cron scheduling is active",
             f"mhddos_cron_active {1 if self.cron_active else 0}",
+            f"# HELP mhddos_sub_tasks_count Number of configured sub-tasks",
+            f"mhddos_sub_tasks_count {len(self.sub_tasks)}",
         ]
         return lines
+
+    # -------------------------------------------------------------------- #
+    # --- Core Service Hooks (NEW in v2.0) ----------------------------- #
+    # -------------------------------------------------------------------- #
+
+    def on_before_core_traffic_control(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Hook called before core applies traffic control.
+        Allows us to extract bandwidth/latency from sub_tasks if needed.
+        """
+        # If payload doesn't have direct TC keys, try to get from first sub-task
+        if "throughput_in_mbps" not in payload and self.sub_tasks:
+            first_task = self.sub_tasks[0]
+            if "throughput_in_mbps" in first_task:
+                payload["throughput_in_mbps"] = first_task["throughput_in_mbps"]
+            if "latency_in_ms" in first_task:
+                payload["latency_in_ms"] = first_task["latency_in_ms"]
+        
+        return payload
 
     # -------------------------------------------------------------------- #
     # --- Private Helpers (Ported from old container_control.py) ------- #
@@ -164,27 +200,6 @@ class MhDosAdapter(ApplicationAdapter):
         time.sleep(2)
         log.info("Exiting container now.")
         os._exit(0)
-
-    def _apply_network_settings(self, bandwidth: int, latency: int) -> bool:
-        try:
-            iface = "eth0"
-            # Clear existing rules first
-            subprocess.run(["tc", "qdisc", "del", "dev", iface, "root"], check=False, stderr=subprocess.PIPE)
-            
-            # Apply new rules
-            log.info(f"Applying network settings: {bandwidth}Mbps, {latency}ms latency.")
-            cmd_tbf = [
-                "tc", "qdisc", "add", "dev", iface, "root", "tbf",
-                "rate", f"{bandwidth}mbit", "burst", "32k", "latency", f"{latency}ms"
-            ]
-            subprocess.run(cmd_tbf, check=True)
-            return True
-        except subprocess.CalledProcessError as e:
-            log.error(f"Failed to apply network settings: {e.stderr.decode() if e.stderr else e}")
-            return False
-        except Exception as e:
-            log.error(f"Unknown error applying network settings: {e}")
-            return False
 
     def _format_start_args(self, json_data: dict) -> list:
         return [
@@ -216,12 +231,14 @@ class MhDosAdapter(ApplicationAdapter):
                 log.info("Stop requested, aborting attack sequence.")
                 break
 
-            bw = int(config.get("throughput_in_mbps", 10))
-            lat = int(config.get("latency_in_ms", 0))
-            self._apply_network_settings(bw, lat)
-
+            # Note: Traffic control is now handled by the core service
+            # based on throughput_in_mbps and latency_in_ms keys in the config
+            
             self.running_task_name = config.get("name", "Unnamed Task")
             log.info(f"Starting task: {self.running_task_name}")
+
+            # Apply per-task traffic control before launching process
+            self._apply_per_task_traffic_control(config)
 
             args = self._format_start_args(config)
             if not self._launch_main_process(args, ensure_user):
@@ -334,3 +351,34 @@ class MhDosAdapter(ApplicationAdapter):
             return round(recv_mbps, 2), round(sent_mbps, 2)
         except Exception:
             return None, None
+
+    def _apply_per_task_traffic_control(self, task_config: Dict[str, Any]) -> None:
+        """
+        Apply traffic control for a specific task.
+        This manually applies TC since the core service only applies it once at start.
+        For true per-task TC, we'd need to extend the core or handle it here.
+        """
+        bandwidth = task_config.get("throughput_in_mbps", 10)
+        latency = task_config.get("latency_in_ms", 0)
+        
+        if not bandwidth:
+            return
+            
+        iface = "eth0"
+        try:
+            # Clear existing rules first
+            subprocess.run(["tc", "qdisc", "del", "dev", iface, "root"], 
+                          check=False, stderr=subprocess.PIPE)
+            
+            # Apply new rules  
+            burst = max(32, int(bandwidth * 1000 / 8))  # Sensible burst calculation
+            cmd = [
+                "tc", "qdisc", "add", "dev", iface, "root", "tbf",
+                "rate", f"{bandwidth}mbit", "burst", f"{burst}k", "latency", f"{latency}ms"
+            ]
+            subprocess.run(cmd, check=True)
+            log.info(f"Applied per-task traffic control: {bandwidth}Mbps, {latency}ms latency.")
+        except subprocess.CalledProcessError as e:
+            log.warning(f"Failed to apply per-task traffic control: {e}")
+        except Exception as e:
+            log.warning(f"Error applying per-task traffic control: {e}")
