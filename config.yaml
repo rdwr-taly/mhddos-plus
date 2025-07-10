@@ -1,0 +1,4 @@
+adapter:
+  class: mhddos_adapter.MhDosAdapter
+  primary_payload_key: sub_tasks
+  run_as_user: mhddos_user
