@@ -1,0 +1,281 @@
+{
+  "id": "mhddos-plus-recurrent",
+  "displayName": "MHDDoS Plus (Recurrent WebDDoS)",
+  "description": "Advanced recurrent Layer 7 WebDDoS attack tool using MHDDoS Plus techniques for continuous stress testing and security validation with flexible scheduling.",
+  "icon": "fas fa-bolt",
+  "category": "Security Tools",
+  "subCategory": "DDoS Attack",
+  "deploymentContext": "app",
+  "image_id_ref": "mhddos-plus-latest",
+  "taskLifecycle": "recurrent",
+
+  "scheduling_fields": {
+    "type": "interval",
+    "start_time_utc": {
+      "label": "Attack Start Time (UTC)",
+      "required": true
+    },
+    "end_time_utc": {
+      "label": "Attack End Time (UTC)",
+      "required": false
+    },
+    "interval_value": 30,
+    "interval_unit": "minutes",
+    "max_concurrent_runs": 3,
+    "overlap_policy": "skip"
+  },
+
+  "deployment": {
+    "container_command_template": [
+      "python", "-m", "uvicorn", "container_control_core:app",
+      "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"
+    ],
+    "fixed_ports": [8080],
+    "default_env_vars": [
+      {
+        "name": "SUB_TASKS",
+        "label": "Attack Configuration",
+        "type": "textarea",
+        "default_value": "[{\"method\": \"GET\", \"url\": \"https://httpbin.org/get\", \"threads\": 500, \"duration\": 300}]",
+        "tooltip": "JSON array of attack tasks with method, url, threads, and duration",
+        "required": true,
+        "validation": {
+          "type": "json"
+        }
+      },
+      {
+        "name": "THROUGHPUT_IN_MBPS",
+        "label": "Bandwidth Limit (Mbps)",
+        "type": "integer",
+        "default_value": 10,
+        "tooltip": "Maximum outgoing bandwidth in Mbps for the entire attack",
+        "min": 1,
+        "max": 1000
+      },
+      {
+        "name": "LATENCY_IN_MS",
+        "label": "Network Latency (ms)",
+        "type": "integer",
+        "default_value": 0,
+        "tooltip": "Artificial network latency to simulate realistic conditions",
+        "min": 0,
+        "max": 5000
+      },
+      {
+        "name": "PROXY_LIST_PATH",
+        "label": "Proxy List Path",
+        "type": "string",
+        "default_value": "",
+        "tooltip": "Optional path to proxy list file within container (e.g., files/proxies/http.txt)",
+        "required": false
+      },
+      {
+        "name": "USER_AGENTS_PATH",
+        "label": "User Agents Path",
+        "type": "string", 
+        "default_value": "files/useragent.txt",
+        "tooltip": "Path to user agents file within container",
+        "required": false
+      },
+      {
+        "name": "REFERERS_PATH",
+        "label": "Referers Path",
+        "type": "string",
+        "default_value": "files/referers.txt", 
+        "tooltip": "Path to referers file within container",
+        "required": false
+      },
+      {
+        "name": "DEBUG",
+        "label": "Debug Mode",
+        "type": "boolean",
+        "default_value": false,
+        "tooltip": "Enable detailed logging and debug output"
+      },
+      {
+        "name": "AUTO_TERMINATE",
+        "label": "Auto Terminate",
+        "type": "boolean",
+        "default_value": true,
+        "tooltip": "Automatically terminate container after attack completion"
+      },
+      {
+        "name": "MAX_MEMORY_MB",
+        "label": "Memory Limit (MB)",
+        "type": "integer",
+        "default_value": 2048,
+        "tooltip": "Maximum memory usage in MB before self-termination",
+        "min": 512,
+        "max": 8192
+      }
+    ],
+    "volume_mounts_template": [
+      {
+        "host_path_template": "/var/showrunner/shared/proxies",
+        "container_path": "/app/files/proxies",
+        "mode": "ro",
+        "optional": true
+      },
+      {
+        "host_path_template": "/var/showrunner/logs/mhddos-plus/{{task.id}}",
+        "container_path": "/app/logs",
+        "mode": "rw",
+        "optional": false
+      }
+    ]
+  },
+
+  "containerControl": {
+    "enabled": true,
+    "api_port_fixed": 8080,
+    "metrics_endpoint_path": "/api/metrics",
+    "actions": {
+      "start": {
+        "endpoint": "/api/start",
+        "method": "POST",
+        "timeout_seconds": 30,
+        "payload_template_type": "custom",
+        "payload_template": {
+          "sub_tasks": "{{env.SUB_TASKS | json_parse}}",
+          "throughput_in_mbps": "{{env.THROUGHPUT_IN_MBPS}}",
+          "latency_in_ms": "{{env.LATENCY_IN_MS}}",
+          "proxy_list_path": "{{env.PROXY_LIST_PATH}}",
+          "user_agents_path": "{{env.USER_AGENTS_PATH}}",
+          "referers_path": "{{env.REFERERS_PATH}}",
+          "debug": "{{env.DEBUG}}",
+          "auto_terminate": "{{env.AUTO_TERMINATE}}",
+          "max_memory_mb": "{{env.MAX_MEMORY_MB}}"
+        },
+        "description": "Start the MHDDoS Plus attack with specified configuration"
+      },
+      "stop": {
+        "endpoint": "/api/stop",
+        "method": "POST",
+        "timeout_seconds": 15,
+        "description": "Stop all running attacks and cleanup"
+      },
+      "update_config": {
+        "endpoint": "/api/update",
+        "method": "POST",
+        "timeout_seconds": 10,
+        "payload_template_type": "custom",
+        "payload_template": {
+          "throughput_in_mbps": "{{env.THROUGHPUT_IN_MBPS}}",
+          "latency_in_ms": "{{env.LATENCY_IN_MS}}",
+          "debug": "{{env.DEBUG}}"
+        },
+        "updatable_fields": ["THROUGHPUT_IN_MBPS", "LATENCY_IN_MS", "DEBUG"],
+        "description": "Update attack parameters while running"
+      }
+    }
+  },
+
+  "capabilities": {
+    "can_stop": true,
+    "can_resume": false,
+    "can_redeploy": true,
+    "can_edit_while_running": true,
+    "can_schedule": true,
+    "can_auto_scale": false
+  },
+
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "scrape_path": "/metrics",
+      "scrape_port_number": 8080,
+      "scrape_interval": "15s"
+    },
+    "grafana": {
+      "enabled": true,
+      "dashboard_url_template": "/grafana/d/mhddos-plus-{{task.id}}/mhddos-plus-attack-details",
+      "panel_links": [
+        {
+          "title": "Attack Traffic",
+          "url": "/grafana/d/mhddos-plus-traffic/mhddos-plus-traffic-overview?var-task_id={{task.id}}"
+        },
+        {
+          "title": "System Resources", 
+          "url": "/grafana/d/mhddos-plus-resources/mhddos-plus-resource-usage?var-task_id={{task.id}}"
+        }
+      ]
+    }
+  },
+
+  "ui": {
+    "deployment_form_sections": [
+      {
+        "title": "Attack Configuration",
+        "description": "Define the attack parameters and targets",
+        "fields": ["SUB_TASKS", "PROXY_LIST_PATH", "USER_AGENTS_PATH", "REFERERS_PATH"]
+      },
+      {
+        "title": "Performance & Limits",
+        "description": "Configure performance and resource limits",
+        "fields": ["THROUGHPUT_IN_MBPS", "LATENCY_IN_MS", "MAX_MEMORY_MB"]
+      },
+      {
+        "title": "Runtime Options", 
+        "description": "Control attack behavior and debugging",
+        "fields": ["DEBUG", "AUTO_TERMINATE"]
+      }
+    ],
+    "card_info_fields": [
+      {
+        "label": "Attack Type",
+        "source_type": "env_var",
+        "source_key": "SUB_TASKS"
+      },
+      {
+        "label": "Bandwidth Limit",
+        "source_type": "env_var",
+        "source_key": "THROUGHPUT_IN_MBPS"
+      },
+      {
+        "label": "Network Latency",
+        "source_type": "env_var",
+        "source_key": "LATENCY_IN_MS"
+      },
+      {
+        "label": "Auto Terminate",
+        "source_type": "env_var",
+        "source_key": "AUTO_TERMINATE"
+      }
+    ],
+    "card_primary_metric": {
+      "label": "Attack Rate",
+      "source_path": "mhddos_requests_per_second",
+      "unit": "rps"
+    },
+    "card_secondary_metrics": [
+      {
+        "label": "Bandwidth Usage",
+        "source_path": "mhddos_bandwidth_mbps",
+        "unit": "Mbps"
+      },
+      {
+        "label": "Active Threads",
+        "source_path": "mhddos_active_threads",
+        "unit": ""
+      }
+    ],
+    "card_basic_metrics": [
+      {
+        "label": "Total Requests",
+        "source_path": "mhddos_total_requests",
+        "unit": ""
+      },
+      {
+        "label": "Success Rate",
+        "source_path": "mhddos_success_rate",
+        "unit": "%"
+      },
+      {
+        "label": "Memory Usage",
+        "source_path": "container_memory_usage_mb",
+        "unit": "MB"
+      }
+    ],
+    "card_live_update_fields": ["THROUGHPUT_IN_MBPS", "LATENCY_IN_MS", "DEBUG"]
+  }
+}

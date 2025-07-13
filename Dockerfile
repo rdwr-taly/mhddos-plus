@@ -39,14 +39,18 @@ RUN useradd -ms /bin/bash mhddos_user && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Clone Container Control Core v2.0 from GitHub
+RUN git clone --branch v1.0.0 --depth 1 https://github.com/rdwr-taly/container-control.git /tmp/container-control && \
+    cp /tmp/container-control/container_control_core.py . && \
+    cp /tmp/container-control/app_adapter.py . && \
+    rm -rf /tmp/container-control
+
 # Copy the application workload
 COPY config.json .
 COPY start.py .
 COPY files ./files/
 
-# Copy the new container control files
-COPY container_control_core.py .
-COPY app_adapter.py .
+# Copy application-specific adapter
 COPY mhddos_adapter.py .
 COPY config.yaml .
 
