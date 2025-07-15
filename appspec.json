@@ -277,5 +277,9 @@
       }
     ],
     "card_live_update_fields": ["THROUGHPUT_IN_MBPS", "LATENCY_IN_MS", "DEBUG"]
+  },
+  "image": {
+    "repo_tag": "razor29/mhddos-plus:v1.0.6",
+    "description": "Recurrent WebDDoS Attacker"
   }
 }
