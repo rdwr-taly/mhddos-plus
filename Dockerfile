@@ -1,4 +1,4 @@
-FROM python:3.8.12-slim-buster
+FROM python:3.11-slim-bookworm
 
 # Set environment variables, etc.
 ENV PYTHONUNBUFFERED=1
