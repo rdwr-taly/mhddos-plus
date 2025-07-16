@@ -54,7 +54,13 @@ class MhDosAdapter(ApplicationAdapter):
             log.info("Payload does not contain 'sub_tasks', adapting to new format.")
             payload = {"sub_tasks": [payload]}
 
-        self.sub_tasks = payload.get("sub_tasks", [])
+        # Ensure sub_tasks is always a list
+        sub_tasks = payload.get("sub_tasks")
+        if not isinstance(sub_tasks, list):
+            if sub_tasks is not None:
+                log.warning("'sub_tasks' payload is not a list, ignoring value")
+            sub_tasks = []
+        self.sub_tasks = sub_tasks
         cron_schedule = payload.get("cron_schedule")
         start_time = payload.get("start_time")
 
@@ -145,7 +151,7 @@ class MhDosAdapter(ApplicationAdapter):
             "next_run_time": next_run_str,
             "cron_active": self.cron_active,
             "cron_schedule": self.cron_schedule,
-            "sub_tasks_count": len(self.sub_tasks),
+            "sub_tasks_count": len(self.sub_tasks or []),
         }
 
         # Optionally include custom throughput calculation for compatibility
@@ -169,7 +175,7 @@ class MhDosAdapter(ApplicationAdapter):
             f"# HELP mhddos_cron_active Whether cron scheduling is active",
             f"mhddos_cron_active {1 if self.cron_active else 0}",
             f"# HELP mhddos_sub_tasks_count Number of configured sub-tasks",
-            f"mhddos_sub_tasks_count {len(self.sub_tasks)}",
+            f"mhddos_sub_tasks_count {len(self.sub_tasks or [])}",
         ]
         return lines
 
