@@ -67,7 +67,8 @@ class MhDosAdapter(ApplicationAdapter):
         # --- Mode Decision: Cron vs. Immediate ---
         if cron_schedule and start_time:
             self.auto_remove = payload.get("auto_remove", False)
-            self._setup_cron(cron_schedule, start_time, ensure_user)
+            if not self._setup_cron(cron_schedule, start_time, ensure_user):
+                raise RuntimeError("Failed to schedule cron job")
             return self.cron_thread
         else:
             self.auto_remove = payload.get("auto_remove", True)
@@ -276,14 +277,16 @@ class MhDosAdapter(ApplicationAdapter):
         else:
             self.app_status = "stopped"
 
-    def _setup_cron(self, schedule_str: str, start_time_str: str, ensure_user):
+    def _setup_cron(self, schedule_str: str, start_time_str: str, ensure_user) -> bool:
         schedule.clear()
         try:
-            start_time_utc = datetime.fromisoformat(
+            start_time = datetime.fromisoformat(
                 start_time_str.replace("Z", "+00:00")
-            ).astimezone(timezone.utc)
-            
-            now_utc = datetime.now(timezone.utc)
+            )
+            if start_time.tzinfo:
+                start_time = start_time.astimezone(timezone.utc).replace(
+                    tzinfo=None
+                )
             
             # Simplified scheduling logic from old implementation
             unit = schedule_str[-1]
@@ -299,23 +302,37 @@ class MhDosAdapter(ApplicationAdapter):
             # Align to the start time's components
             at_str = None
             if unit == 'd':
-                at_str = f"{start_time_utc.hour:02d}:{start_time_utc.minute:02d}"
+                at_str = f"{start_time.hour:02d}:{start_time.minute:02d}"
             elif unit == 'h':
-                at_str = f":{start_time_utc.minute:02d}"
+                at_str = f":{start_time.minute:02d}"
             
             if at_str:
                 job.at(at_str)
 
             job.do(self._run_attacks, sub_tasks=self.sub_tasks, ensure_user=ensure_user)
             
-            # Calculate first run
-            while job.next_run and job.next_run < now_utc:
-                 job.run() # This advances next_run
-                 schedule.clear() # a bit of a hack to reset and recalculate
-                 job.do(self._run_attacks, sub_tasks=self.sub_tasks, ensure_user=ensure_user)
+            # Ensure the first execution is not before the provided start time
+            while job.next_run:
+                jrun = job.next_run
+                if jrun.tzinfo:
+                    jrun = jrun.astimezone(timezone.utc).replace(tzinfo=None)
+                s_time = start_time
+                if s_time.tzinfo:
+                    s_time = s_time.astimezone(timezone.utc).replace(tzinfo=None)
+                if jrun >= s_time:
+                    break
+                delta = timedelta(**{job.unit: job.interval})
+                job.next_run += delta
 
 
-            self.next_run_time = schedule.next_run
+            self.next_run_time = None
+            if schedule.next_run:
+                nr = schedule.next_run
+                if nr.tzinfo:
+                    nr = nr.astimezone(timezone.utc)
+                else:
+                    nr = nr.replace(tzinfo=timezone.utc)
+                self.next_run_time = nr
             self.cron_active = True
             self.cron_schedule = schedule_str
             self.app_status = "active"
@@ -324,16 +341,25 @@ class MhDosAdapter(ApplicationAdapter):
             if not self.cron_thread or not self.cron_thread.is_alive():
                 self.cron_thread = threading.Thread(target=self._run_cron, daemon=True)
                 self.cron_thread.start()
+            return True
 
         except Exception as e:
             log.error(f"Error scheduling cron job: {e}")
             self.app_status = "error"
+            return False
 
     def _run_cron(self):
         log.info("Cron thread started.")
         while self.cron_active:
             schedule.run_pending()
-            self.next_run_time = schedule.next_run
+            self.next_run_time = None
+            if schedule.next_run:
+                nr = schedule.next_run
+                if nr.tzinfo:
+                    nr = nr.astimezone(timezone.utc)
+                else:
+                    nr = nr.replace(tzinfo=timezone.utc)
+                self.next_run_time = nr
             time.sleep(1)
         log.info("Cron thread finished.")
 
@@ -378,12 +404,15 @@ class MhDosAdapter(ApplicationAdapter):
             
             # Apply new rules  
             burst = max(32, int(bandwidth * 1000 / 8))  # Sensible burst calculation
+            latency_val = max(1, int(latency))
             cmd = [
                 "tc", "qdisc", "add", "dev", iface, "root", "tbf",
-                "rate", f"{bandwidth}mbit", "burst", f"{burst}k", "latency", f"{latency}ms"
+                "rate", f"{bandwidth}mbit", "burst", f"{burst}k", "latency", f"{latency_val}ms"
             ]
             subprocess.run(cmd, check=True)
-            log.info(f"Applied per-task traffic control: {bandwidth}Mbps, {latency}ms latency.")
+            log.info(
+                f"Applied per-task traffic control: {bandwidth}Mbps, {latency_val}ms latency."
+            )
         except subprocess.CalledProcessError as e:
             log.warning(f"Failed to apply per-task traffic control: {e}")
         except Exception as e:
