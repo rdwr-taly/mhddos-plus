@@ -196,6 +196,13 @@ class MhDosAdapter(ApplicationAdapter):
                 payload["throughput_in_mbps"] = first_task["throughput_in_mbps"]
             if "latency_in_ms" in first_task:
                 payload["latency_in_ms"] = first_task["latency_in_ms"]
+
+        # Ensure latency is always at least 1 ms so tc commands succeed
+        if "latency_in_ms" in payload:
+            try:
+                payload["latency_in_ms"] = max(1, int(payload["latency_in_ms"]))
+            except Exception:
+                payload["latency_in_ms"] = 1
         
         return payload
 
@@ -291,13 +298,18 @@ class MhDosAdapter(ApplicationAdapter):
             # Simplified scheduling logic from old implementation
             unit = schedule_str[-1]
             val = int(schedule_str[:-1])
-            job = schedule.every(val)
 
-            if unit == 's': job.seconds
-            elif unit == 'm': job.minutes
-            elif unit == 'h': job.hours
-            elif unit == 'd': job.days
-            else: raise ValueError(f"Invalid schedule unit: {unit}")
+            job = schedule.every(val)
+            if unit == 's':
+                job = job.seconds
+            elif unit == 'm':
+                job = job.minutes
+            elif unit == 'h':
+                job = job.hours
+            elif unit == 'd':
+                job = job.days
+            else:
+                raise ValueError(f"Invalid schedule unit: {unit}")
 
             # Align to the start time's components
             at_str = None
@@ -326,8 +338,8 @@ class MhDosAdapter(ApplicationAdapter):
 
 
             self.next_run_time = None
-            if schedule.next_run:
-                nr = schedule.next_run
+            nr = schedule.next_run()
+            if nr:
                 if nr.tzinfo:
                     nr = nr.astimezone(timezone.utc)
                 else:
@@ -353,8 +365,8 @@ class MhDosAdapter(ApplicationAdapter):
         while self.cron_active:
             schedule.run_pending()
             self.next_run_time = None
-            if schedule.next_run:
-                nr = schedule.next_run
+            nr = schedule.next_run()
+            if nr:
                 if nr.tzinfo:
                     nr = nr.astimezone(timezone.utc)
                 else:
