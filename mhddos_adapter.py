@@ -361,6 +361,9 @@ class MhDosAdapter(ApplicationAdapter):
         log.info("Cron thread started.")
         while self.cron_active:
             schedule.run_pending()
+            if not self.proc and not self.stop_requested:
+                # Ensure status reflects idle state between cron runs
+                self.app_status = "active"
             self.next_run_time = None
             nr = schedule.next_run()
             if nr:
