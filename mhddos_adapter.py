@@ -311,30 +311,27 @@ class MhDosAdapter(ApplicationAdapter):
             else:
                 raise ValueError(f"Invalid schedule unit: {unit}")
 
-            # Align to the start time's components
+            # Align to start time components for daily/hourly schedules
             at_str = None
             if unit == 'd':
                 at_str = f"{start_time.hour:02d}:{start_time.minute:02d}"
             elif unit == 'h':
                 at_str = f":{start_time.minute:02d}"
-            
+
             if at_str:
                 job.at(at_str)
 
             job.do(self._run_attacks, sub_tasks=self.sub_tasks, ensure_user=ensure_user)
-            
-            # Ensure the first execution is not before the provided start time
-            while job.next_run:
-                jrun = job.next_run
-                if jrun.tzinfo:
-                    jrun = jrun.astimezone(timezone.utc).replace(tzinfo=None)
-                s_time = start_time
-                if s_time.tzinfo:
-                    s_time = s_time.astimezone(timezone.utc).replace(tzinfo=None)
-                if jrun >= s_time:
-                    break
-                delta = timedelta(**{job.unit: job.interval})
-                job.next_run += delta
+
+            # Force the first run to respect the provided start time
+            next_run = start_time
+            if next_run.tzinfo:
+                next_run = next_run.astimezone(timezone.utc).replace(tzinfo=None)
+            now = datetime.utcnow()
+            delta = timedelta(**{job.unit: job.interval})
+            while next_run < now:
+                next_run += delta
+            job.next_run = next_run
 
 
             self.next_run_time = None

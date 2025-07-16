@@ -30,4 +30,5 @@ traffic_control:
   bandwidth_mbps_key: "throughput_in_mbps"
   default_bandwidth_mbps: 10
   latency_ms_key: "latency_in_ms" 
-  default_latency_ms: 0
+  # tc rejects latency=0 so use a small positive default
+  default_latency_ms: 1
