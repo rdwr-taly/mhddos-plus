@@ -6,6 +6,7 @@ import time
 import logging
 import schedule
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
@@ -27,7 +28,7 @@ class MhDosAdapter(ApplicationAdapter):
         super().__init__(static_cfg)
         # --- Runtime State ---
         self.proc: subprocess.Popen | None = None
-        self.app_status = "initializing"
+        self._set_status("initializing")
         self.auto_remove = True
         self.cron_schedule: str | None = None
         self.cron_active = False
@@ -39,6 +40,18 @@ class MhDosAdapter(ApplicationAdapter):
         self.grace_period = 5
         self._prev_net_io = None
         self._prev_time = None
+
+
+    def _sync_status(self) -> None:
+        """Mirror app_status to the core's state if available."""
+        core = sys.modules.get("container_control_core")
+        if core and hasattr(core, "state"):
+            core.state["app_status"] = self.app_status
+
+    def _set_status(self, status: str) -> None:
+        """Set adapter status and propagate to the core."""
+        self.app_status = status
+        self._sync_status()
 
 
     # -------------------------------------------------------------------- #
@@ -86,7 +99,7 @@ class MhDosAdapter(ApplicationAdapter):
     def stop(self) -> None:
         log.info("Stop request received.")
         self.stop_requested = True
-        self.app_status = "stopped"
+        self._set_status("stopped")
 
         # --- Stop Cron ---
         if self.cron_active:
@@ -142,6 +155,7 @@ class MhDosAdapter(ApplicationAdapter):
     def get_metrics(self) -> Dict[str, Any]:
         # Core v2.0 provides network metrics automatically via /api/metrics
         # We focus on application-specific metrics here
+        self._sync_status()
         next_run_str = "Not scheduled"
         if self.next_run_time:
             next_run_str = self.next_run_time.astimezone(timezone.utc).isoformat()
@@ -239,7 +253,7 @@ class MhDosAdapter(ApplicationAdapter):
             return False
 
     def _run_attacks(self, sub_tasks: List[Dict], ensure_user):
-        self.app_status = "running"
+        self._set_status("running")
         for config in sub_tasks:
             if self.stop_requested:
                 log.info("Stop requested, aborting attack sequence.")
@@ -274,15 +288,15 @@ class MhDosAdapter(ApplicationAdapter):
         self.running_task_name = None
         if not self.stop_requested:
             if self.cron_active:
-                self.app_status = "active"
+                self._set_status("active")
                 log.info("Attack sequence finished, cron remains active.")
             else:
-                self.app_status = "stopped"
+                self._set_status("stopped")
                 log.info("Immediate attack sequence finished.")
                 if self.auto_remove:
                     self._self_terminate()
         else:
-            self.app_status = "stopped"
+            self._set_status("stopped")
 
     def _setup_cron(self, schedule_str: str, start_time_str: str, ensure_user) -> bool:
         schedule.clear()
@@ -344,7 +358,7 @@ class MhDosAdapter(ApplicationAdapter):
                 self.next_run_time = nr
             self.cron_active = True
             self.cron_schedule = schedule_str
-            self.app_status = "active"
+            self._set_status("active")
             log.info(f"Cron job scheduled: {schedule_str}. Next run: {self.next_run_time}")
 
             if not self.cron_thread or not self.cron_thread.is_alive():
@@ -354,7 +368,7 @@ class MhDosAdapter(ApplicationAdapter):
 
         except Exception as e:
             log.error(f"Error scheduling cron job: {e}")
-            self.app_status = "error"
+            self._set_status("error")
             return False
 
     def _run_cron(self):
@@ -363,7 +377,7 @@ class MhDosAdapter(ApplicationAdapter):
             schedule.run_pending()
             if not self.proc and not self.stop_requested:
                 # Ensure status reflects idle state between cron runs
-                self.app_status = "active"
+                self._set_status("active")
             self.next_run_time = None
             nr = schedule.next_run()
             if nr:
