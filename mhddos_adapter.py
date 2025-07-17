@@ -79,6 +79,8 @@ class MhDosAdapter(ApplicationAdapter):
 
         # --- Mode Decision: Cron vs. Immediate ---
         if cron_schedule and start_time:
+            # Cron mode: status should be "active" until the first run
+            self._set_status("active")
             self.auto_remove = payload.get("auto_remove", False)
             if not self._setup_cron(cron_schedule, start_time, ensure_user):
                 raise RuntimeError("Failed to schedule cron job")
@@ -87,7 +89,9 @@ class MhDosAdapter(ApplicationAdapter):
             self.auto_remove = payload.get("auto_remove", True)
             self.cron_active = False
             schedule.clear()
-            
+
+            # Immediate mode: mark running before launching thread
+            self._set_status("running")
             attack_thread = threading.Thread(
                 target=self._run_attacks,
                 args=(self.sub_tasks, ensure_user),
