@@ -1,125 +1,260 @@
 {
-  "id": "mhddos-plus-stateful-attacker",
-  "displayName": "MHDDoS Plus Recurent Attacker",
-  "description": "A stateful MHDDoS attacker with internal scheduling for creating complex, recurrent attack patterns. The container manages its own lifecycle as a long-running service.",
-  "icon": "fas fa-server",
+  "capabilities": {
+    "can_edit_while_running": false,
+    "can_redeploy": true,
+    "can_resume": true,
+    "can_schedule": false,
+    "can_stop": true
+  },
   "category": "Security Tools",
-  "subCategory": "DDoS Attack (Stateful)",
-  "deploymentContext": "app",
-  "image_id_ref": "mhddos-plus-latest",
-  "taskLifecycle": "stateful",
-  "image": {
-    "repo_tag": "razor29/mhddos-plus:v1.0.6",
-    "description": "Stateful Recurrent WebDDoS Attacker with Container Control"
-  },
-  "deployment": {
-    "container_command_template": [
-      "python", "-m", "uvicorn", "container_control_core:app",
-      "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"
-    ],
-    "fixed_ports": [8080],
-    "default_env_vars": [
-      {
-        "name": "CRON_SCHEDULE",
-        "label": "Attack Interval (e.g., 1h, 30m, 5s)",
-        "type": "string",
-        "default_value": "1h",
-        "tooltip": "The interval for the internal scheduler to repeat the attack sequence. Use 's' for seconds, 'm' for minutes, 'h' for hours, 'd' for days."
-      },
-      {
-        "name": "START_TIME_OFFSET_MINUTES",
-        "label": "Start Delay (minutes from now)",
-        "type": "integer",
-        "default_value": 0,
-        "tooltip": "Delay in minutes before the first attack cycle begins."
-      },
-      {
-        "name": "SUB_TASK_CONFIGS_JSON",
-        "label": "Attack Phases",
-        "type": "string",
-        "default_value": "[{\"name\":\"Initial GET Flood\",\"MHDDOS_METHOD\":\"GET\",\"MHDDOS_TARGET_URL\":\"https://httpbin.org/get\",\"MHDDOS_PROXY_TYPE\":\"1\",\"MHDDOS_THREADS\":500,\"MHDDOS_PROXY_FILE\":\"http.txt\",\"MHDDOS_RPC\":100,\"MHDDOS_DURATION_SECONDS\":300,\"MHDDOS_COOKIE\":\"\",\"MHDDOS_THROUGHPUT_MBPS\":10,\"MHDDOS_LATENCY_MS\":0}]",
-        "tooltip": "Define one or more attack phases to run sequentially in each cycle. To change this, you must stop and redeploy the task.",
-        "ui_type": "field_group_list",
-        "item_name_label": "Phase Name",
-        "sub_fields_ref": [
-          "name", "MHDDOS_METHOD", "MHDDOS_TARGET_URL", "MHDDOS_PROXY_TYPE", "MHDDOS_THREADS", "MHDDOS_PROXY_FILE", "MHDDOS_RPC", "MHDDOS_DURATION_SECONDS", "MHDDOS_COOKIE", "MHDDOS_THROUGHPUT_MBPS", "MHDDOS_LATENCY_MS"
-        ]
-      },
-      { "name": "name", "label": "Phase Name", "type": "string", "is_item_identifier": true, "default_value": "Phase 1" },
-      { "name": "MHDDOS_METHOD", "label": "Method", "type": "select", "default_value": "GET", "options": ["GET", "POST", "STRESS", "CFB", "BYPASS", "COOKIE", "TCP", "UDP", "SYN", "KILLER", "SLOW", "AVB"] },
-      { "name": "MHDDOS_TARGET_URL", "label": "Target (URL or IP:Port)", "type": "string", "default_value": "https://httpbin.org/get", "required": true },
-      { "name": "MHDDOS_PROXY_TYPE", "label": "Proxy Type", "type": "select", "default_value": "1", "options": [{"value": "1", "label": "HTTP"}, {"value": "4", "label": "SOCKS4"}, {"value": "5", "label": "SOCKS5"}, {"value": "0", "label": "All (from config)"}], "tooltip": "Select the type of proxy to use for this phase." },
-      { "name": "MHDDOS_THREADS", "label": "Threads", "type": "integer", "default_value": 500 },
-      { "name": "MHDDOS_PROXY_FILE", "label": "Proxy List File", "type": "string", "default_value": "http.txt", "tooltip": "Filename of the proxy list within files/proxies/" },
-      { "name": "MHDDOS_RPC", "label": "Reqs Per Conn", "type": "integer", "default_value": 100 },
-      { "name": "MHDDOS_DURATION_SECONDS", "label": "Duration (s)", "type": "integer", "default_value": 300 },
-      { "name": "MHDDOS_COOKIE", "label": "Custom Cookie", "type": "string", "required": false, "tooltip": "Optional. Custom cookie string to be sent with requests." },
-      { "name": "MHDDOS_THROUGHPUT_MBPS", "label": "Bandwidth (Mbps)", "type": "integer", "default_value": 10, "tooltip": "Max bandwidth for this phase.", "min": 1, "max": 1000 },
-      { "name": "MHDDOS_LATENCY_MS", "label": "Latency (ms)", "type": "integer", "default_value": 0, "tooltip": "Simulated network latency for this phase.", "min": 0, "max": 5000 },
-      { "name": "AUTO_REMOVE_CONTAINER", "label": "Auto-Remove on Stop", "type": "boolean", "default_value": false, "tooltip": "If true, container will self-destruct after a manual stop. Set to false for a persistent stateful service." }
-    ]
-  },
   "containerControl": {
-    "enabled": true,
-    "api_port_fixed": 8080,
-    "metrics_endpoint_path": "/api/metrics",
     "actions": {
       "start": {
         "endpoint": "/api/start",
         "method": "POST",
-        "timeout_seconds": 30,
-        "payload_template_type": "custom",
         "payload_template": {
+          "auto_remove": "{{env.AUTO_REMOVE_CONTAINER}}",
           "cron_schedule": "{{env.CRON_SCHEDULE}}",
           "start_time": "{{calculated_utc_start_time_from_offset_env.START_TIME_OFFSET_MINUTES}}",
-          "auto_remove": "{{env.AUTO_REMOVE_CONTAINER}}",
           "sub_tasks": "{{json_rename_keys(env.SUB_TASK_CONFIGS_JSON, _itemName->name|name->name|MHDDOS_METHOD->Method|MHDDOS_TARGET_URL->Target URL|MHDDOS_PROXY_TYPE->Type|MHDDOS_THREADS->Threads|MHDDOS_PROXY_FILE->Proxy List File|MHDDOS_RPC->RPC|MHDDOS_DURATION_SECONDS->Duration (seconds)|MHDDOS_COOKIE->Cookie|MHDDOS_THROUGHPUT_MBPS->throughput_in_mbps|MHDDOS_LATENCY_MS->latency_in_ms)}}"
-        }
+        },
+        "payload_template_type": "custom",
+        "timeout_seconds": 30
       },
       "stop": {
         "endpoint": "/api/stop",
         "method": "POST",
         "timeout_seconds": 15
       }
-    }
+    },
+    "api_port_fixed": 8080,
+    "enabled": true,
+    "metrics_endpoint_path": "/api/metrics"
   },
-  "capabilities": {
-    "can_stop": true,
-    "can_resume": true,
-    "can_redeploy": true,
-    "can_edit_while_running": false,
-    "can_schedule": false
-  },
-  "monitoring": {
-    "prometheus": { "enabled": true, "scrape_path": "/metrics", "scrape_port_number": 8080 }
-  },
-  "ui": {
-    "deployment_form_sections": [
+  "deployment": {
+    "container_command_template": "",
+    "default_env_vars": [
       {
-        "title": "Scheduling",
-        "description": "Configure the container's internal scheduler. This cannot be changed after deployment.",
-        "fields": ["CRON_SCHEDULE", "START_TIME_OFFSET_MINUTES", "AUTO_REMOVE_CONTAINER"]
+        "default_value": "1h",
+        "label": "Attack Interval (e.g., 1h, 30m, 5s)",
+        "name": "CRON_SCHEDULE",
+        "tooltip": "The interval for the internal scheduler to repeat the attack sequence. Use 's' for seconds, 'm' for minutes, 'h' for hours, 'd' for days.",
+        "type": "string"
       },
       {
-        "title": "Attack Phases",
-        "description": "Define the sequence of attacks to be executed in each scheduled cycle. This cannot be changed after deployment.",
-        "fields": ["SUB_TASK_CONFIGS_JSON"]
+        "default_value": 0,
+        "label": "Start Delay (minutes from now)",
+        "name": "START_TIME_OFFSET_MINUTES",
+        "tooltip": "Delay in minutes before the first attack cycle begins.",
+        "type": "integer"
+      },
+      {
+        "default_value": "[{\"name\":\"Initial GET Flood\",\"MHDDOS_METHOD\":\"GET\",\"MHDDOS_TARGET_URL\":\"https://httpbin.org/get\",\"MHDDOS_PROXY_TYPE\":\"1\",\"MHDDOS_THREADS\":500,\"MHDDOS_PROXY_FILE\":\"http.txt\",\"MHDDOS_RPC\":100,\"MHDDOS_DURATION_SECONDS\":300,\"MHDDOS_COOKIE\":\"\",\"MHDDOS_THROUGHPUT_MBPS\":10,\"MHDDOS_LATENCY_MS\":0}]",
+        "item_name_label": "Phase Name",
+        "label": "Attack Phases",
+        "name": "SUB_TASK_CONFIGS_JSON",
+        "sub_fields_ref": [
+          "name",
+          "MHDDOS_METHOD",
+          "MHDDOS_TARGET_URL",
+          "MHDDOS_PROXY_TYPE",
+          "MHDDOS_THREADS",
+          "MHDDOS_PROXY_FILE",
+          "MHDDOS_RPC",
+          "MHDDOS_DURATION_SECONDS",
+          "MHDDOS_COOKIE",
+          "MHDDOS_THROUGHPUT_MBPS",
+          "MHDDOS_LATENCY_MS"
+        ],
+        "tooltip": "Define one or more attack phases to run sequentially in each cycle. To change this, you must stop and redeploy the task.",
+        "type": "string",
+        "ui_type": "field_group_list"
+      },
+      {
+        "default_value": "Phase 1",
+        "is_item_identifier": true,
+        "label": "Phase Name",
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "default_value": "GET",
+        "label": "Method",
+        "name": "MHDDOS_METHOD",
+        "options": [
+          "GET",
+          "POST",
+          "STRESS",
+          "CFB",
+          "BYPASS",
+          "COOKIE",
+          "TCP",
+          "UDP",
+          "SYN",
+          "KILLER",
+          "SLOW",
+          "AVB"
+        ],
+        "type": "select"
+      },
+      {
+        "default_value": "https://httpbin.org/get",
+        "label": "Target (URL or IP:Port)",
+        "name": "MHDDOS_TARGET_URL",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "default_value": "1",
+        "label": "Proxy Type",
+        "name": "MHDDOS_PROXY_TYPE",
+        "options": [
+          "1",
+          "4",
+          "5",
+          "0"
+        ],
+        "tooltip": "Select the type of proxy to use for this phase (1=HTTP, 4=SOCKS4, 5=SOCKS5, 0=All).",
+        "type": "select"
+      },
+      {
+        "default_value": 500,
+        "label": "Threads",
+        "name": "MHDDOS_THREADS",
+        "type": "integer"
+      },
+      {
+        "default_value": "http.txt",
+        "label": "Proxy List File",
+        "name": "MHDDOS_PROXY_FILE",
+        "tooltip": "Filename of the proxy list within files/proxies/",
+        "type": "string"
+      },
+      {
+        "default_value": 100,
+        "label": "Reqs Per Conn",
+        "name": "MHDDOS_RPC",
+        "type": "integer"
+      },
+      {
+        "default_value": 300,
+        "label": "Duration (s)",
+        "name": "MHDDOS_DURATION_SECONDS",
+        "type": "integer"
+      },
+      {
+        "label": "Custom Cookie",
+        "name": "MHDDOS_COOKIE",
+        "required": false,
+        "tooltip": "Optional. Custom cookie string to be sent with requests.",
+        "type": "string"
+      },
+      {
+        "default_value": 10,
+        "label": "Bandwidth (Mbps)",
+        "max": 1000,
+        "min": 1,
+        "name": "MHDDOS_THROUGHPUT_MBPS",
+        "tooltip": "Max bandwidth for this phase.",
+        "type": "integer"
+      },
+      {
+        "default_value": 0,
+        "label": "Latency (ms)",
+        "max": 5000,
+        "min": 0,
+        "name": "MHDDOS_LATENCY_MS",
+        "tooltip": "Simulated network latency for this phase.",
+        "type": "integer"
+      },
+      {
+        "default_value": false,
+        "label": "Auto-Remove on Stop",
+        "name": "AUTO_REMOVE_CONTAINER",
+        "tooltip": "If true, container will self-destruct after a manual stop. Set to false for a persistent stateful service.",
+        "type": "boolean"
+      }
+    ]
+  },
+  "deploymentContext": "app",
+  "description": "A stateful MHDDoS attacker with internal scheduling for creating complex, recurrent attack patterns. The container manages its own lifecycle as a long-running service.",
+  "displayName": "MHDDoS Plus (Recurrent Attacker)",
+  "icon": "fas fa-server",
+  "id": "mhddos-plus-recurrent-attacker",
+  "image": {
+    "repo_tag": "razor29/mhddos-plus:v1.0.6",
+    "description": "Recurrent WebDDoS Attacker"
+  },
+  "monitoring": {
+    "prometheus": {
+      "enabled": false,
+      "scrape_path": "/metrics",
+      "scrape_port_number": 8080
+    }
+  },
+  "subCategory": "WebDDoS Attacker",
+  "taskLifecycle": "stateful",
+  "ui": {
+    "card_basic_metrics": [
+      {
+        "label": "CPU",
+        "max_value": 100,
+        "source_path": "system.cpu_percent",
+        "unit": "%"
+      },
+      {
+        "label": "Memory",
+        "max_value": 100,
+        "source_path": "system.memory_percent",
+        "unit": "%"
+      }
+    ],
+    "card_info_fields": [
+      {
+        "label": "Next Run",
+        "source_key": "",
+        "source_type": "task_db"
       }
     ],
     "card_primary_metric": [
-        { "label": "Outgoing", "source_path": "adapter_metrics.outgoing_throughput_mbps", "unit": "Mbps" },
-        { "label": "Incoming", "source_path": "adapter_metrics.incoming_throughput_mbps", "unit": "Mbps" }
+      {
+        "label": "Outgoing",
+        "source_path": "adapter_metrics.outgoing_throughput_mbps",
+        "unit": "Mbps"
+      },
+      {
+        "label": "Incoming",
+        "source_path": "adapter_metrics.incoming_throughput_mbps",
+        "unit": "Mbps"
+      }
     ],
     "card_secondary_metrics": [
-      { "label": "Running Task", "source_path": "adapter_metrics.running_task", "unit": "" },
-      { "label": "Schedule", "source_path": "adapter_metrics.cron_schedule", "unit": "" }
+      {
+        "label": "Running Task",
+        "source_path": "adapter_metrics.running_task",
+        "unit": ""
+      },
+      {
+        "label": "Next Run Time",
+        "source_path": "adapter_metrics.next_run_time",
+        "unit": ""
+      }
     ],
-    "card_info_fields": [
-        { "label": "Next Run", "source_path": "adapter_metrics.next_run_time" }
-    ],
-    "card_basic_metrics": [
-      { "label": "CPU", "source_path": "system.cpu_percent", "unit": "%", "max_value": 100 },
-      { "label": "Memory", "source_path": "system.memory_percent", "unit": "%", "max_value": 100 }
+    "deployment_form_sections": [
+      {
+        "fields": [
+          "CRON_SCHEDULE",
+          "START_TIME_OFFSET_MINUTES",
+          "AUTO_REMOVE_CONTAINER"
+        ],
+        "title": "Scheduling"
+      },
+      {
+        "fields": [
+          "SUB_TASK_CONFIGS_JSON"
+        ],
+        "title": "Attack Phases"
+      }
     ]
   }
 }
