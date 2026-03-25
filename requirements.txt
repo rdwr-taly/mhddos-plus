@@ -10,3 +10,4 @@ pyroxy @ git+https://github.com/MatrixTM/PyRoxy.git
 yarl>=1.7.2
 schedule>=1.0.0
 prometheus-client>=0.20
+showrunner-sdk[full] @ git+https://github.com/rdwr-taly/showrunner-sdk.git@main

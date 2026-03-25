@@ -67,7 +67,7 @@
     ],
     "card_fields": {
       "primary_label": "sub_tasks[0].url",
-      "metrics": ["mhddos_status", "mhddos_throughput_mbps"]
+      "metrics": ["mhddos_running_task", "mhddos_incoming_throughput_mbps", "mhddos_outgoing_throughput_mbps"]
     }
   },
   "capabilities": {
