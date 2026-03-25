@@ -1,8 +1,8 @@
 {
-  "image": "",
-  "version": "unreleased",
+  "image": "razor29/mhddos-plus:v2.0.0-dev",
+  "version": "v2.0.0-dev",
   "is_latest": false,
-  "released_at": null,
-  "commit": null,
+  "released_at": "2026-03-25T16:47:22Z",
+  "commit": "f2109877374f5bd39e0eef10fa5df26bf8f09a82",
   "changelog": ""
 }
