@@ -37,7 +37,7 @@ RUN useradd -ms /bin/bash mhddos_user && \
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir 'showrunner-sdk[full]'
+    pip install --no-cache-dir "showrunner-sdk[full] @ git+https://github.com/rdwr-taly/showrunner-sdk.git@main"
 
 # Copy the application workload
 COPY config.json .
