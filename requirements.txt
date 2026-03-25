@@ -9,7 +9,4 @@ pyasn1==0.4.8
 pyroxy @ git+https://github.com/MatrixTM/PyRoxy.git
 yarl>=1.7.2
 schedule>=1.0.0
-fastapi
-uvicorn
-uvloop
-ruamel.yaml
+prometheus-client>=0.20
