@@ -1,0 +1,78 @@
+{
+  "$schema": "showrunner/v1",
+  "id": "mhddos-plus",
+  "name": "MHDDoS Plus",
+  "description": "Multi-phase MHDDoS attack controller with cron scheduling, sub-task management, and traffic control.",
+  "category": "Security Tools",
+  "subCategory": "DDoS Simulation",
+  "icon": "fas fa-bomb",
+  "lifecycle": "long-running",
+  "image": {
+    "name": "razor29/mhddos-plus"
+  },
+  "sdk": {
+    "version": ">=0.1.0",
+    "metrics_port": 9090,
+    "health_path": "/healthz",
+    "metrics_path": "/metrics"
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "sub_tasks": {
+        "type": "array",
+        "title": "Attack Phases",
+        "description": "List of sub-task configurations to execute",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {"type": "string", "title": "Method"},
+            "url": {"type": "string", "title": "Target URL"},
+            "threads": {"type": "integer", "title": "Threads"},
+            "duration": {"type": "integer", "title": "Duration (s)"},
+            "rpc": {"type": "integer", "title": "RPC"},
+            "proxy_file": {"type": "string", "title": "Proxy File"},
+            "bandwidth_limit_mbps": {"type": "number", "title": "Bandwidth Limit (Mbps)"}
+          }
+        }
+      },
+      "cron_schedule": {
+        "type": "string",
+        "title": "Cron Schedule",
+        "description": "Cron expression for recurring execution (e.g., '*/30 * * * *')"
+      },
+      "start_time": {
+        "type": "string",
+        "title": "Start Time Offset",
+        "description": "Delay before first run (e.g., '5m', '1h')"
+      },
+      "auto_remove": {
+        "type": "boolean",
+        "title": "Auto Remove Container",
+        "default": false
+      }
+    },
+    "required": ["sub_tasks"]
+  },
+  "ui": {
+    "sections": [
+      {
+        "title": "Scheduling",
+        "fields": ["cron_schedule", "start_time", "auto_remove"]
+      },
+      {
+        "title": "Attack Phases",
+        "fields": ["sub_tasks"]
+      }
+    ],
+    "card_fields": {
+      "primary_label": "sub_tasks[0].url",
+      "metrics": ["mhddos_status", "mhddos_throughput_mbps"]
+    }
+  },
+  "capabilities": {
+    "can_stop": true,
+    "can_redeploy": true,
+    "can_resume": true
+  }
+}

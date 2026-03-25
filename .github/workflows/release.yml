@@ -61,3 +61,24 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.prep_tags.outputs.tags }}
+
+      - name: Update .showrunner/release.json
+        run: |
+          mkdir -p .showrunner
+          cat > .showrunner/release.json << RELEASE_EOF
+          {
+            "image": "${DOCKER_IMAGE_NAME}:${{ github.event.inputs.version }}",
+            "version": "${{ github.event.inputs.version }}",
+            "is_latest": ${{ github.event.inputs.tag_as_latest }},
+            "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${{ github.sha }}",
+            "changelog": ""
+          }
+          RELEASE_EOF
+
+      - name: Commit release info
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .showrunner/release.json
+          git diff --staged --quiet && echo "No changes" || git commit -m "release: update to v${{ github.event.inputs.version }}" && git push
