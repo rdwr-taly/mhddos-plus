@@ -16,8 +16,6 @@ import time
 import signal
 import logging
 import schedule
-import os
-import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
@@ -48,6 +46,9 @@ running_task_info = metrics.gauge(
     "mhddos_running_task", "1 if a task is currently running, 0 otherwise"
 )
 metrics.set_app_info(name="mhddos-plus", version="2.0.0")
+
+# ── Lifecycle ──
+shutdown_event = threading.Event()
 
 
 class MhddosManager:
@@ -430,8 +431,8 @@ class MhddosManager:
     @staticmethod
     def _self_terminate() -> None:
         time.sleep(2)
-        log.info("Exiting container now.")
-        os._exit(0)
+        log.info("Auto-remove triggered — requesting clean shutdown.")
+        shutdown_event.set()
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -450,13 +451,14 @@ def main() -> None:
     # ── 3. Start metrics/health server on :9090 ──
     metrics.start_server()
 
-    # ── 4. Handle SIGTERM for graceful shutdown ──
-    def handle_sigterm(signum, frame):
-        log.info("SIGTERM received — shutting down.")
+    # ── 4. Handle SIGTERM/SIGINT for graceful shutdown ──
+    def handle_shutdown(signum, frame):
+        log.info("Received signal %d — shutting down.", signum)
         manager.stop()
-        sys.exit(0)
+        shutdown_event.set()
 
-    signal.signal(signal.SIGTERM, handle_sigterm)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
 
     # ── 5. Start attacks from initial config ──
     if cfg:
@@ -466,14 +468,12 @@ def main() -> None:
         log.warning("No config found at startup — waiting for SIGHUP with config.")
         health.set_status("idle", reason="No config at startup")
 
-    # ── 6. Keep main thread alive ──
-    try:
-        while True:
-            manager._update_throughput_metrics()
-            time.sleep(1)
-    except KeyboardInterrupt:
-        log.info("Interrupted — shutting down.")
-        manager.stop()
+    # ── 6. Keep main thread alive until shutdown is requested ──
+    while not shutdown_event.is_set():
+        manager._update_throughput_metrics()
+        shutdown_event.wait(timeout=1)
+
+    log.info("Shutdown complete.")
 
 
 if __name__ == "__main__":

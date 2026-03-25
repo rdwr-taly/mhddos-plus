@@ -13,6 +13,7 @@ WORKDIR /app
 # Install needed system packages + Tini
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    curl \
     libcurl4 \
     libssl-dev \
     make \
@@ -52,6 +53,13 @@ RUN mkdir -p /config
 RUN chown -R mhddos_user:mhddos_user /app /config
 
 EXPOSE 9090
+
+# Health check against ShowRunner SDK metrics/health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:9090/healthz || exit 1
+
+# Switch to non-root user
+USER mhddos_user
 
 # Use Tini as init, run main.py directly
 ENTRYPOINT ["/usr/bin/tini", "--", "python", "main.py"]
