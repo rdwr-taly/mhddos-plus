@@ -7,32 +7,7 @@
     "can_update_while_running": false
   },
   "category": "Security Tools",
-  "containerControl": {
-    "actions": {
-      "start": {
-        "endpoint": "/api/start",
-        "method": "POST",
-        "payload_template": {
-          "auto_remove": "{{env.AUTO_REMOVE_CONTAINER}}",
-          "cron_schedule": "{{env.CRON_SCHEDULE}}",
-          "start_time": "{{calculated_utc_start_time_from_offset_env.START_TIME_OFFSET_MINUTES}}",
-          "sub_tasks": "{{json_rename_keys(env.SUB_TASK_CONFIGS_JSON, _itemName->name|name->name|MHDDOS_METHOD->Method|MHDDOS_TARGET_URL->Target URL|MHDDOS_PROXY_TYPE->Type|MHDDOS_THREADS->Threads|MHDDOS_PROXY_FILE->Proxy List File|MHDDOS_RPC->RPC|MHDDOS_DURATION_SECONDS->Duration (seconds)|MHDDOS_COOKIE->Cookie|MHDDOS_THROUGHPUT_MBPS->throughput_in_mbps|MHDDOS_LATENCY_MS->latency_in_ms)}}"
-        },
-        "payload_template_type": "custom",
-        "timeout_seconds": 30
-      },
-      "stop": {
-        "endpoint": "/api/stop",
-        "method": "POST",
-        "timeout_seconds": 15
-      }
-    },
-    "api_port_fixed": 8080,
-    "enabled": true,
-    "metrics_endpoint_path": "/api/metrics"
-  },
   "deployment": {
-    "container_command_template": "",
     "default_env_vars": [
       {
         "default_value": "1h",
@@ -176,7 +151,13 @@
         "tooltip": "If true, container will self-destruct after a manual stop. Set to false for a persistent stateful service.",
         "type": "boolean"
       }
-    ]
+    ],
+    "sdk_config_template": {
+      "auto_remove": "{{env.AUTO_REMOVE_CONTAINER}}",
+      "cron_schedule": "{{env.CRON_SCHEDULE}}",
+      "start_time": "{{calculated_utc_start_time_from_offset_env.START_TIME_OFFSET_MINUTES}}",
+      "sub_tasks": "{{json_rename_keys(env.SUB_TASK_CONFIGS_JSON, _itemName->name|name->name|MHDDOS_METHOD->Method|MHDDOS_TARGET_URL->Target URL|MHDDOS_PROXY_TYPE->Type|MHDDOS_THREADS->Threads|MHDDOS_PROXY_FILE->Proxy List File|MHDDOS_RPC->RPC|MHDDOS_DURATION_SECONDS->Duration (seconds)|MHDDOS_COOKIE->Cookie|MHDDOS_THROUGHPUT_MBPS->throughput_in_mbps|MHDDOS_LATENCY_MS->latency_in_ms)}}"
+    }
   },
   "deploymentContext": "app",
   "description": "A stateful MHDDoS attacker with internal scheduling for creating complex, recurrent attack patterns. The container manages its own lifecycle as a long-running service.",
@@ -188,7 +169,7 @@
     "prometheus": {
       "enabled": false,
       "scrape_path": "/metrics",
-      "scrape_port_number": 8080
+      "scrape_port_number": 9090
     }
   },
   "subCategory": "DDoS Attack (Stateful)",
