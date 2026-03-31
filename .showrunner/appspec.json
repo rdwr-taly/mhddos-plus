@@ -167,7 +167,7 @@
   "image_id_ref": "razor29/mhddos-plus",
   "monitoring": {
     "prometheus": {
-      "enabled": false,
+      "enabled": true,
       "scrape_path": "/metrics",
       "scrape_port_number": 9090
     }
@@ -199,24 +199,19 @@
     "card_primary_metric": [
       {
         "label": "Outgoing",
-        "source_path": "adapter_metrics.outgoing_throughput_mbps",
+        "source_path": "mhddos_outgoing_throughput_mbps",
         "unit": "Mbps"
       },
       {
         "label": "Incoming",
-        "source_path": "adapter_metrics.incoming_throughput_mbps",
+        "source_path": "mhddos_incoming_throughput_mbps",
         "unit": "Mbps"
       }
     ],
     "card_secondary_metrics": [
       {
         "label": "Running Task",
-        "source_path": "adapter_metrics.running_task",
-        "unit": ""
-      },
-      {
-        "label": "Next Run Time",
-        "source_path": "adapter_metrics.next_run_time",
+        "source_path": "mhddos_running_task",
         "unit": ""
       }
     ],
