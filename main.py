@@ -17,9 +17,13 @@ import signal
 import logging
 import schedule
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List
 
 from showrunner_sdk import config, metrics, health
+
+CONFIG_PATH = "/config/app.json"
+STARTUP_CONFIG_WAIT_SECONDS = 10
 
 # ── Logging ──
 logging.basicConfig(
@@ -442,11 +446,11 @@ class MhddosManager:
 def main() -> None:
     manager = MhddosManager()
 
-    # ── 1. Load config from SDK ──
-    cfg = config.load()
+    # ── 1. Register reload callback before the initial load ──
+    config.on_reload(manager.update_config)
 
-    # ── 2. Register reload callback ──
-    config.on_reload(lambda new_cfg: manager.update_config(new_cfg))
+    # ── 2. Load config from SDK ──
+    cfg = config.load()
 
     # ── 3. Start metrics/health server on :9090 ──
     metrics.start_server()
@@ -461,6 +465,20 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_shutdown)
 
     # ── 5. Start attacks from initial config ──
+    if not cfg and STARTUP_CONFIG_WAIT_SECONDS > 0:
+        log.info(
+            "No config present at startup -- waiting up to %ss for /config/app.json",
+            STARTUP_CONFIG_WAIT_SECONDS,
+        )
+        deadline = time.time() + STARTUP_CONFIG_WAIT_SECONDS
+        while time.time() < deadline and not shutdown_event.is_set():
+            shutdown_event.wait(timeout=0.5)
+            if not Path(CONFIG_PATH).exists():
+                continue
+            cfg = config.load()
+            if cfg:
+                break
+
     if cfg:
         health.set_status("starting")
         manager.start(cfg)

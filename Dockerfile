@@ -10,7 +10,7 @@ ENV TZ=UTC
 
 WORKDIR /app
 
-# Install needed system packages + Tini
+# Install needed system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iptables \
     sudo \
     procps \
-    tini \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for the workload
@@ -60,5 +59,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # Switch to non-root user
 USER mhddos_user
 
-# Use Tini as init, run main.py directly
-ENTRYPOINT ["/usr/bin/tini", "--", "python", "main.py"]
+# Run the SDK entry point directly so it receives the initial SIGHUP reload.
+ENTRYPOINT ["python", "main.py"]
