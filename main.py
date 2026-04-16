@@ -446,16 +446,13 @@ class MhddosManager:
 def main() -> None:
     manager = MhddosManager()
 
-    # ── 1. Register reload callback before the initial load ──
-    config.on_reload(manager.update_config)
-
-    # ── 2. Load config from SDK ──
+    # ── 1. Load config from SDK ──
     cfg = config.load()
 
-    # ── 3. Start metrics/health server on :9090 ──
+    # ── 2. Start metrics/health server on :9090 ──
     metrics.start_server()
 
-    # ── 4. Handle SIGTERM/SIGINT for graceful shutdown ──
+    # ── 3. Handle SIGTERM/SIGINT for graceful shutdown ──
     def handle_shutdown(signum, frame):
         log.info("Received signal %d — shutting down.", signum)
         manager.stop()
@@ -464,7 +461,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
-    # ── 5. Start attacks from initial config ──
+    # ── 4. Start attacks from initial config ──
     if not cfg and STARTUP_CONFIG_WAIT_SECONDS > 0:
         log.info(
             "No config present at startup -- waiting up to %ss for /config/app.json",
@@ -478,6 +475,9 @@ def main() -> None:
             cfg = config.load()
             if cfg:
                 break
+
+    # ── 5. Register live reload handling after initial startup config is settled ──
+    config.on_reload(manager.update_config)
 
     if cfg:
         health.set_status("starting")
