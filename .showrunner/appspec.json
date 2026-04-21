@@ -8,6 +8,16 @@
   },
   "category": "Security Tools",
   "deployment": {
+<<<<<<< HEAD
+=======
+    "container_command_template": "",
+    "sdk_config_template": {
+      "auto_remove": "{{env.AUTO_REMOVE_CONTAINER}}",
+      "cron_schedule": "{{env.CRON_SCHEDULE}}",
+      "start_time": "{{calculated_utc_start_time_from_offset_env.START_TIME_OFFSET_MINUTES}}",
+      "sub_tasks": "{{json_rename_keys(env.SUB_TASK_CONFIGS_JSON, _itemName->name|name->name|MHDDOS_METHOD->Method|MHDDOS_TARGET_URL->Target URL|MHDDOS_PROXY_TYPE->Type|MHDDOS_THREADS->Threads|MHDDOS_PROXY_FILE->Proxy List File|MHDDOS_RPC->RPC|MHDDOS_DURATION_SECONDS->Duration (seconds)|MHDDOS_COOKIE->Cookie|MHDDOS_THROUGHPUT_MBPS->throughput_in_mbps|MHDDOS_LATENCY_MS->latency_in_ms)}}"
+    },
+>>>>>>> 6bf8c8d (Fix mhddos appspec card metrics)
     "default_env_vars": [
       {
         "default_value": "1h",
@@ -191,9 +201,9 @@
     ],
     "card_info_fields": [
       {
-        "label": "Next Run",
-        "source_key": "",
-        "source_type": "task_db"
+        "label": "Interval",
+        "source_key": "CRON_SCHEDULE",
+        "source_type": "env_var"
       }
     ],
     "card_primary_metric": [
@@ -210,8 +220,13 @@
     ],
     "card_secondary_metrics": [
       {
-        "label": "Running Task",
-        "source_path": "mhddos_running_task",
+        "label": "Attack Phases",
+        "source_path": "mhddos_sub_tasks_count",
+        "unit": ""
+      },
+      {
+        "label": "Scheduler",
+        "source_path": "mhddos_cron_active",
         "unit": ""
       }
     ],
@@ -231,5 +246,6 @@
         "title": "Attack Phases"
       }
     ]
-  }
+  },
+  "schema_version": 6
 }
