@@ -8,8 +8,6 @@
   },
   "category": "Security Tools",
   "deployment": {
-<<<<<<< HEAD
-=======
     "container_command_template": "",
     "sdk_config_template": {
       "auto_remove": "{{env.AUTO_REMOVE_CONTAINER}}",
@@ -17,7 +15,6 @@
       "start_time": "{{calculated_utc_start_time_from_offset_env.START_TIME_OFFSET_MINUTES}}",
       "sub_tasks": "{{json_rename_keys(env.SUB_TASK_CONFIGS_JSON, _itemName->name|name->name|MHDDOS_METHOD->Method|MHDDOS_TARGET_URL->Target URL|MHDDOS_PROXY_TYPE->Type|MHDDOS_THREADS->Threads|MHDDOS_PROXY_FILE->Proxy List File|MHDDOS_RPC->RPC|MHDDOS_DURATION_SECONDS->Duration (seconds)|MHDDOS_COOKIE->Cookie|MHDDOS_THROUGHPUT_MBPS->throughput_in_mbps|MHDDOS_LATENCY_MS->latency_in_ms)}}"
     },
->>>>>>> 6bf8c8d (Fix mhddos appspec card metrics)
     "default_env_vars": [
       {
         "default_value": "1h",
