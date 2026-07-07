@@ -1,8 +1,8 @@
 {
-  "image": "razor29/mhddos-plus:v2.0.2-dev",
-  "version": "v2.0.2-dev",
+  "image": "razor29/mhddos-plus:v2.1.0-sr3",
+  "version": "v2.1.0-sr3",
   "is_latest": false,
-  "released_at": "2026-04-16T08:58:05Z",
-  "commit": "98b2c5dcb0ce228073b8811a85eb83dde1d49081",
-  "changelog": ""
+  "released_at": "2026-07-07T00:00:00Z",
+  "commit": "",
+  "changelog": "SR3 pilot: write /report/report.json (volume measures + load-generated playbook) for ShowRunner pull."
 }

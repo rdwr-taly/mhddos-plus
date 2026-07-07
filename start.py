@@ -4,10 +4,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from itertools import cycle
 from json import load
+from json import dumps as _sr_json_dumps
 from logging import basicConfig, getLogger, shutdown
 from math import log2, trunc
 from multiprocessing import RawValue
 from os import urandom as randbytes
+from os import getenv as _sr_getenv
+from tempfile import NamedTemporaryFile as _sr_NamedTemporaryFile
 from pathlib import Path
 from re import compile
 from random import choice as randchoice
@@ -1634,6 +1637,38 @@ def handleProxyList(con, proxy_li, proxy_ty, url=None):
     return proxies
 
 
+# ── SR3: per-run volume stats sink ─────────────────────────────────────────
+# The parent (main.py, the ShowRunner SDK entrypoint) reads this file to fold
+# this subprocess's REQUESTS_SENT / BYTES_SEND totals into the session report it
+# writes at window close. We rewrite it once per second so the numbers survive a
+# mid-run SIGTERM (the common "stop" case). Best-effort — never breaks the flood.
+_SR_RUN_STATS_PATH = _sr_getenv("SR_RUN_STATS_PATH", "/report/run_stats.json")
+
+
+def _sr_write_run_stats(total_requests: int, total_bytes: int,
+                        method: str, target: Any) -> None:
+    try:
+        stats = {
+            "requests_sent": int(total_requests),
+            "bytes_sent": int(total_bytes),
+            "method": str(method),
+            "target": str(target) if target else "",
+        }
+        path = Path(_SR_RUN_STATS_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Atomic replace so the parent never reads a half-written file.
+        with _sr_NamedTemporaryFile(
+            "w", dir=str(path.parent), prefix=".run_stats-", suffix=".tmp",
+            delete=False, encoding="utf-8",
+        ) as fh:
+            fh.write(_sr_json_dumps(stats))
+            tmp_name = fh.name
+        Path(tmp_name).replace(path)
+    except Exception:
+        # Reporting is optional; the flood must never be affected by it.
+        pass
+
+
 if __name__ == '__main__':
     with suppress(KeyboardInterrupt):
         with suppress(IndexError):
@@ -1805,6 +1840,12 @@ if __name__ == '__main__':
                 % (target or url.host, method, timer, threads))
             event.set()
             ts = time()
+            # SR3: grand totals across the per-second counter resets below, so
+            # the volume survives to the run-stats file main.py folds into the
+            # SR3 report. Reachability target for the report.
+            _sr_total_requests = 0
+            _sr_total_bytes = 0
+            _sr_report_target = target or (url.host if url else None)
             while time() < ts + timer:
                 logger.debug(
                     f'{bcolors.WARNING}Target:{bcolors.OKBLUE} %s,{bcolors.WARNING} Port:{bcolors.OKBLUE} %s,{bcolors.WARNING} Method:{bcolors.OKBLUE} %s{bcolors.WARNING} PPS:{bcolors.OKBLUE} %s,{bcolors.WARNING} BPS:{bcolors.OKBLUE} %s / %d%%{bcolors.RESET}' %
@@ -1814,10 +1855,19 @@ if __name__ == '__main__':
                      Tools.humanformat(int(REQUESTS_SENT)),
                      Tools.humanbytes(int(BYTES_SEND)),
                      round((time() - ts) / timer * 100, 2)))
+                _sr_total_requests += int(REQUESTS_SENT)
+                _sr_total_bytes += int(BYTES_SEND)
+                _sr_write_run_stats(_sr_total_requests, _sr_total_bytes,
+                                    method, _sr_report_target)
                 REQUESTS_SENT.set(0)
                 BYTES_SEND.set(0)
                 sleep(1)
 
+            # Fold in any residual counted after the last reset.
+            _sr_total_requests += int(REQUESTS_SENT)
+            _sr_total_bytes += int(BYTES_SEND)
+            _sr_write_run_stats(_sr_total_requests, _sr_total_bytes,
+                                method, _sr_report_target)
             event.clear()
             exit()
 

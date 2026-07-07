@@ -47,8 +47,11 @@ COPY files ./files/
 # Create config mount point
 RUN mkdir -p /config
 
+# SR3: writable dir for the report ShowRunner pulls (/report/report.json).
+RUN mkdir -p /report
+
 # Set permissions
-RUN chown -R mhddos_user:mhddos_user /app /config
+RUN chown -R mhddos_user:mhddos_user /app /config /report
 
 EXPOSE 9090
 

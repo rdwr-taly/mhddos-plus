@@ -168,9 +168,9 @@
   },
   "deploymentContext": "app",
   "description": "A stateful MHDDoS attacker with internal scheduling for creating complex, recurrent attack patterns. The container manages its own lifecycle as a long-running service.",
-  "displayName": "MHDDoS Plus (Stateful Attacker)",
+  "displayName": "MHDDoS Plus (Stateful Attacker) (SR3)",
   "icon": "fas fa-server",
-  "id": "mhddos-plus",
+  "id": "mhddos-plus-sr3",
   "image_id_ref": "razor29/mhddos-plus",
   "monitoring": {
     "prometheus": {
@@ -244,5 +244,84 @@
       }
     ]
   },
-  "schema_version": 6
+  "schema_version": 7,
+  "sdk": {
+    "contract_version": 1,
+    "capabilities": [
+      "report_pull_file",
+      "measures"
+    ],
+    "reporting": {
+      "mode": "file",
+      "path": "/report/report.json",
+      "sealed_field": "status",
+      "sealed_value": "final",
+      "poll_interval_sec": 30
+    },
+    "measures": [
+      {
+        "key": "volume.requests_sent",
+        "label": "Requests sent",
+        "type": "count",
+        "unit": "requests",
+        "source": {
+          "kind": "report_json",
+          "path": "volume.requests_sent"
+        },
+        "success_checkable": true
+      },
+      {
+        "key": "volume.bytes_sent",
+        "label": "Bytes sent",
+        "type": "count",
+        "unit": "bytes",
+        "source": {
+          "kind": "report_json",
+          "path": "volume.bytes_sent"
+        },
+        "success_checkable": true
+      },
+      {
+        "key": "volume.outgoing_throughput_mbps",
+        "label": "Peak outgoing throughput",
+        "type": "number",
+        "unit": "mbps",
+        "higher_is_better": true,
+        "source": {
+          "kind": "report_json",
+          "path": "volume.outgoing_throughput_mbps"
+        },
+        "success_checkable": true
+      },
+      {
+        "key": "target.reachable",
+        "label": "Target reachability (coarse probe)",
+        "type": "enum",
+        "options": [
+          "online",
+          "offline",
+          "unknown"
+        ],
+        "source": {
+          "kind": "report_json",
+          "path": "target.reachable"
+        },
+        "success_checkable": false
+      }
+    ],
+    "default_playbook": {
+      "steps": [
+        {
+          "id": "load_generated",
+          "name": "The attacker generated volumetric load",
+          "check": {
+            "source": "report",
+            "field": "volume.requests_sent",
+            "op": ">=",
+            "value": 1
+          }
+        }
+      ]
+    }
+  }
 }

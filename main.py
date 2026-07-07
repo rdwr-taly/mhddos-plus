@@ -9,6 +9,8 @@ Replaces the old container-control adapter with showrunner-sdk:
 """
 
 from __future__ import annotations
+import os
+import json
 import subprocess
 import psutil
 import threading
@@ -22,8 +24,12 @@ from typing import Any, Dict, List
 
 from showrunner_sdk import config, metrics, health
 
+import report_writer
+
 CONFIG_PATH = "/config/app.json"
 STARTUP_CONFIG_WAIT_SECONDS = 10
+# SR3: run-stats sink that start.py subprocesses write; folded into the report.
+RUN_STATS_PATH = os.getenv("SR_RUN_STATS_PATH", "/report/run_stats.json")
 
 # ── Logging ──
 logging.basicConfig(
@@ -75,6 +81,12 @@ class MhddosManager:
         self.cron_thread: threading.Thread | None = None
         self._prev_net_io = None
         self._prev_time = None
+        # ── SR3 report accumulators (session-wide volume) ──
+        self._session_requests: int = 0
+        self._session_bytes: int = 0
+        self._peak_outgoing_mbps: float = 0.0
+        self._last_target: str | None = None
+        self._report_written: bool = False
 
     # ------------------------------------------------------------------ #
     # Start / Stop / Update
@@ -211,6 +223,10 @@ class MhddosManager:
                 break
 
             self.running_task_name = task_config.get("name", "Unnamed Task")
+            # SR3: remember the target for the report's reachability probe.
+            target_url = task_config.get("Target URL") or task_config.get("target")
+            if target_url:
+                self._last_target = str(target_url)
             log.info("Starting task: %s", self.running_task_name)
 
             # Apply per-task traffic control before launching
@@ -236,6 +252,9 @@ class MhddosManager:
                     self.proc.poll(),
                 )
                 self.proc = None
+
+            # SR3: fold this phase's volume totals into the session report.
+            self._fold_run_stats()
 
         # Cleanup after all attacks
         self.running_task_name = None
@@ -427,6 +446,71 @@ class MhddosManager:
             incoming_mbps_gauge.set(incoming)
         if outgoing is not None:
             outgoing_mbps_gauge.set(outgoing)
+            # SR3: track the peak for the report.
+            if outgoing > self._peak_outgoing_mbps:
+                self._peak_outgoing_mbps = outgoing
+
+    # ------------------------------------------------------------------ #
+    # Private: SR3 report — fold subprocess volume + write /report/report.json
+    # ------------------------------------------------------------------ #
+
+    def _fold_run_stats(self) -> None:
+        """Fold a start.py subprocess's run-stats file into session totals.
+
+        start.py rewrites RUN_STATS_PATH once per second with its cumulative
+        REQUESTS_SENT / BYTES_SEND, so this captures the phase's volume even if
+        the subprocess was killed mid-run. The file is consumed (unlinked) so a
+        subsequent phase (which starts its counters from zero) is summed, never
+        double-counted.
+        """
+        try:
+            path = Path(RUN_STATS_PATH)
+            if not path.exists():
+                return
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self._session_requests += int(data.get("requests_sent", 0) or 0)
+            self._session_bytes += int(data.get("bytes_sent", 0) or 0)
+            tgt = data.get("target")
+            if tgt:
+                self._last_target = str(tgt)
+            path.unlink(missing_ok=True)
+        except Exception as e:  # never let reporting affect the run
+            log.debug("Failed to fold run stats: %s", e)
+
+    def write_final_report(self) -> bool:
+        """Write /report/report.json for ShowRunner to pull at window close.
+
+        Idempotent, best-effort, never raises. Called on every exit path.
+        """
+        if self._report_written:
+            return True
+        self._report_written = True
+        # Fold any in-flight phase's stats left behind by a mid-run kill.
+        self._fold_run_stats()
+
+        reachable = report_writer.REACHABLE_UNKNOWN
+        try:
+            reachable = report_writer.probe_reachable(self._last_target)
+        except Exception as e:  # pragma: no cover - probe is best-effort
+            log.debug("Reachability probe failed: %s", e)
+
+        ok = report_writer.write_report(
+            requests_sent=self._session_requests,
+            bytes_sent=self._session_bytes,
+            outgoing_throughput_mbps=self._peak_outgoing_mbps,
+            target_reachable=reachable,
+            target=self._last_target,
+        )
+        if ok:
+            log.info(
+                "SR3 report written (requests=%d, bytes=%d, peak_mbps=%.2f, "
+                "target_reachable=%s).",
+                self._session_requests,
+                self._session_bytes,
+                self._peak_outgoing_mbps,
+                reachable,
+            )
+        return ok
 
     # ------------------------------------------------------------------ #
     # Private: self-terminate
@@ -461,6 +545,17 @@ def main() -> None:
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
+    try:
+        _run_lifecycle(manager, cfg)
+    finally:
+        # ── SR3: write /report/report.json on ANY exit path (normal
+        # completion, SIGTERM/SIGINT stop, or error). ShowRunner pulls it. ──
+        manager.write_final_report()
+
+    log.info("Shutdown complete.")
+
+
+def _run_lifecycle(manager: "MhddosManager", cfg: Dict[str, Any] | None) -> None:
     # ── 4. Start attacks from initial config ──
     if not cfg and STARTUP_CONFIG_WAIT_SECONDS > 0:
         log.info(
@@ -490,8 +585,6 @@ def main() -> None:
     while not shutdown_event.is_set():
         manager._update_throughput_metrics()
         shutdown_event.wait(timeout=1)
-
-    log.info("Shutdown complete.")
 
 
 if __name__ == "__main__":
