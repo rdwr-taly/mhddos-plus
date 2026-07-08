@@ -1,8 +1,8 @@
 {
-  "image": "razor29/mhddos-plus:v2.1.0-sr3",
-  "version": "v2.1.0-sr3",
+  "image": "razor29/mhddos-plus:v2.1.2-sr3",
+  "version": "v2.1.2-sr3",
   "is_latest": false,
-  "released_at": "2026-07-07T09:51:07Z",
-  "commit": "6fe018ecd21f9284f7d6824685d62193240a0d5f",
+  "released_at": "2026-07-08T08:24:06Z",
+  "commit": "992e60e859501130c80a280c5f9d33e7219bd8ef",
   "changelog": ""
 }
