@@ -42,6 +42,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config.json .
 COPY start.py .
 COPY main.py .
+COPY report_writer.py .
 COPY files ./files/
 
 # Create config mount point
