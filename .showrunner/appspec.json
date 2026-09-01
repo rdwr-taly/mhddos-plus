@@ -168,9 +168,9 @@
   },
   "deploymentContext": "app",
   "description": "A stateful MHDDoS attacker with internal scheduling for creating complex, recurrent attack patterns. The container manages its own lifecycle as a long-running service.",
-  "displayName": "MHDDoS Plus (Stateful Attacker) (SR3)",
+  "displayName": "MHDDoS Plus (Stateful Attacker)",
   "icon": "fas fa-server",
-  "id": "mhddos-plus-sr3",
+  "id": "mhddos-plus",
   "image_id_ref": "razor29/mhddos-plus",
   "monitoring": {
     "prometheus": {
